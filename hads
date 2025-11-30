@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+# Simple CLI login: username "admin", password "admin123"
+
+import sys
+import getpass
+
+VALID_USER = "admin"
+VALID_PASS = "admin123"
+MAX_ATTEMPTS = 3
+
+def main():
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        user = input("Username: ").strip()
+        pwd = getpass.getpass("Password: ")
+        if user == VALID_USER and pwd == VALID_PASS:
+            print("Login successful.")
+            return 0
+        else:
+            print(f"Login failed. ({attempt}/{MAX_ATTEMPTS})")
+    print("Maximum attempts exceeded.")
+    return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

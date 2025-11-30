@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>IP Info</title>
+    <style>
+        :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;line-height:1.4}
+        body{display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f5f7fb;margin:0;padding:24px}
+        .card{background:#fff;border-radius:10px;box-shadow:0 6px 20px rgba(32,33,36,0.08);padding:22px;max-width:720px;width:100%}
+        h1{margin:0 0 8px;font-size:20px}
+        p.lead{color:#555;margin:0 0 16px}
+        .row{display:flex;gap:12px;flex-wrap:wrap}
+        .item{flex:1 1 220px;background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #eef2f7}
+        .label{font-size:12px;color:#6b7280;margin-bottom:6px}
+        .value{font-weight:600;color:#111}
+        button{margin-top:12px;padding:8px 10px;border-radius:8px;border:0;background:#0ea5a4;color:#fff;cursor:pointer}
+        button:disabled{opacity:.5;cursor:default}
+        footer{margin-top:14px;font-size:12px;color:#6b7280}
+        pre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;padding:10px;background:#f1f5f9;border-radius:6px;border:1px solid #e2e8f0}
+    </style>
+</head>
+<body>
+    <main class="card" id="app">
+        <h1>IP & Geo Info</h1>
+        <p class="lead">Fetches your public IP and basic geolocation using public APIs.</p>
+
+        <div class="row" id="info">
+            <div class="item">
+                <div class="label">Public IP</div>
+                <div class="value" id="ip">—</div>
+                <button id="copyIp" disabled>Copy IP</button>
+            </div>
+
+            <div class="item">
+                <div class="label">Hostname</div>
+                <div class="value" id="hostname">—</div>
+            </div>
+
+            <div class="item">
+                <div class="label">Location</div>
+                <div class="value" id="loc">—</div>
+            </div>
+
+            <div class="item">
+                <div class="label">ISP / Org</div>
+                <div class="value" id="org">—</div>
+            </div>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+            <div style="flex:1 1 100%">
+                <div class="label">Raw JSON</div>
+                <pre id="raw">—</pre>
+            </div>
+        </div>
+
+        <footer>
+            Uses ipify (IP) and ipapi.co (geo). Refresh the page to re-query.
+        </footer>
+    </main>
+
+    <script>
+        // Minimal, dependency-free client-side example.
+        (async function () {
+            const el = id => document.getElementById(id);
+            const ipEl = el('ip'), hostEl = el('hostname'), locEl = el('loc'), orgEl = el('org'), rawEl = el('raw'), copyBtn = el('copyIp');
+
+            try {
+                // 1) Get public IP from ipify
+                const ipResp = await fetch('https://api.ipify.org?format=json');
+                if (!ipResp.ok) throw new Error('Failed to fetch IP');
+                const ipData = await ipResp.json();
+                const ip = ipData.ip || '—';
+                ipEl.textContent = ip;
+                copyBtn.disabled = false;
+
+                // 2) Get geolocation + org info from ipapi.co
+                // ipapi.co allows direct lookup by IP: https://ipapi.co/<ip>/json/
+                const geoResp = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
+                if (!geoResp.ok) throw new Error('Failed to fetch geo info');
+                const geo = await geoResp.json();
+
+                // Populate UI
+                hostEl.textContent = (geo.hostname || '—');
+                const city = geo.city || '';
+                const region = geo.region || '';
+                const country = geo.country_name || '';
+                locEl.textContent = [city, region, country].filter(Boolean).join(', ') || '—';
+                orgEl.textContent = (geo.org || geo.organization || '—');
+
+                rawEl.textContent = JSON.stringify({ ip: ipData, geo }, null, 2);
+            } catch (err) {
+                rawEl.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+                // still allow copying if we have an IP displayed
+            }
+
+            // Copy to clipboard
+            copyBtn.addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(ipEl.textContent);
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(()=> (copyBtn.textContent = 'Copy IP'), 1200);
+                } catch {
+                    copyBtn.textContent = 'Copy failed';
+                    setTimeout(()=> (copyBtn.textContent = 'Copy IP'), 1200);
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+# usb_tool.py
+# Simple USB utility using pyusb (libusb backend).
+# Requires: pip install pyusb
+# On Windows, install libusb driver (Zadig) for the target device if needed.
+# Usage examples:
+#   python usb_tool.py list
+#   python usb_tool.py info --vid 0x1234 --pid 0x5678
+#   python usb_tool.py bulk-read --vid 0x1234 --pid 0x5678 --endpoint 0x81 --size 64
+#   python usb_tool.py bulk-write --vid 0x1234 --pid 0x5678 --endpoint 0x01 --data "hello"
+
+import sys
+import argparse
+import usb.core
+import usb.util
+import binascii
+import time
+
+def find_device(vid, pid):
+    dev = usb.core.find(idVendor=vid, idProduct=pid)
+    if dev is None:
+        raise ValueError(f"Device {vid:04x}:{pid:04x} not found")
+    return dev
+
+def list_devices():
+    for d in usb.core.find(find_all=True):
+        try:
+            m = usb.util.get_string(d, d.iManufacturer) or ''
+        except Exception:
+            m = ''
+        try:
+            p = usb.util.get_string(d, d.iProduct) or ''
+        except Exception:
+            p = ''
+        try:
+            s = usb.util.get_string(d, d.iSerialNumber) or ''
+        except Exception:
+            s = ''
+        print(f"{d.bus if hasattr(d,'bus') else '??'}:{d.address if hasattr(d,'address') else '??'}  {d.idVendor:04x}:{d.idProduct:04x}  \"{m}\" \"{p}\" \"{s}\"")
+
+def info_device(vid, pid):
+    dev = find_device(vid, pid)
+    print(f"Device: {vid:04x}:{pid:04x}")
+    try:
+        print("Manufacturer:", usb.util.get_string(dev, dev.iManufacturer))
+        print("Product     :", usb.util.get_string(dev, dev.iProduct))
+        print("Serial      :", usb.util.get_string(dev, dev.iSerialNumber))
+    except Exception:
+        pass
+    for cfg in dev:
+        print(f"Config {cfg.bConfigurationValue}:")
+        for intf in cfg:
+            print(f"  Interface {intf.bInterfaceNumber}, alt {intf.bAlternateSetting}, class {intf.bInterfaceClass}")
+            for ep in intf:
+                print(f"    Endpoint 0x{ep.bEndpointAddress:02x} attr {ep.bmAttributes} maxpkt {ep.wMaxPacketSize}")
+
+def detach_kernel_driver(dev, intf):
+    try:
+        if dev.is_kernel_driver_active(intf):
+            dev.detach_kernel_driver(intf)
+    except (NotImplementedError, usb.core.USBError):
+        pass
+
+def claim_and_set(dev, cfg=None, intf=0):
+    if cfg is not None:
+        dev.set_configuration(cfg)
+    cfg = dev.get_active_configuration()
+    detach_kernel_driver(dev, intf)
+    usb.util.claim_interface(dev, intf)
+
+def release(dev, intf=0):
+    try:
+        usb.util.release_interface(dev, intf)
+    except Exception:
+        pass
+    try:
+        dev.attach_kernel_driver(intf)
+    except Exception:
+        pass
+
+def bulk_read(vid, pid, endpoint, size, timeout=1000, intf=0):
+    dev = find_device(vid, pid)
+    claim_and_set(dev, intf=intf)
+    try:
+        data = dev.read(endpoint, size, timeout=timeout)
+        print("Read:", binascii.hexlify(bytes(data)).decode())
+        try:
+            print("ASCII:", bytes(data).decode(errors='replace'))
+        except Exception:
+            pass
+    finally:
+        release(dev, intf)
+
+def bulk_write(vid, pid, endpoint, data_bytes, timeout=1000, intf=0):
+    dev = find_device(vid, pid)
+    claim_and_set(dev, intf=intf)
+    try:
+        written = dev.write(endpoint, data_bytes, timeout=timeout)
+        print(f"Wrote {written} bytes")
+    finally:
+        release(dev, intf)
+
+def parse_hex_or_int(s):
+    return int(s, 0)
+
+def main():
+    parser = argparse.ArgumentParser(description="Simple USB tool (pyusb)")
+    sub = parser.add_subparsers(dest='cmd')
+
+    sub.add_parser('list', help='List USB devices')
+
+    p_info = sub.add_parser('info', help='Show device info')
+    p_info.add_argument('--vid', type=parse_hex_or_int, required=True)
+    p_info.add_argument('--pid', type=parse_hex_or_int, required=True)
+
+    p_read = sub.add_parser('bulk-read', help='Bulk read from endpoint')
+    p_read.add_argument('--vid', type=parse_hex_or_int, required=True)
+    p_read.add_argument('--pid', type=parse_hex_or_int, required=True)
+    p_read.add_argument('--endpoint', type=parse_hex_or_int, required=True)
+    p_read.add_argument('--size', type=int, default=64)
+    p_read.add_argument('--timeout', type=int, default=1000)
+    p_read.add_argument('--intf', type=int, default=0)
+
+    p_write = sub.add_parser('bulk-write', help='Bulk write to endpoint')
+    p_write.add_argument('--vid', type=parse_hex_or_int, required=True)
+    p_write.add_argument('--pid', type=parse_hex_or_int, required=True)
+    p_write.add_argument('--endpoint', type=parse_hex_or_int, required=True)
+    p_write.add_argument('--data', required=True, help='Data string or hex like 0x01,0x02 or "hello"')
+    p_write.add_argument('--timeout', type=int, default=1000)
+    p_write.add_argument('--intf', type=int, default=0)
+
+    args = parser.parse_args()
+    if args.cmd == 'list':
+        list_devices()
+    elif args.cmd == 'info':
+        info_device(args.vid, args.pid)
+    elif args.cmd == 'bulk-read':
+        bulk_read(args.vid, args.pid, args.endpoint, args.size, args.timeout, args.intf)
+    elif args.cmd == 'bulk-write':
+        # interpret data: comma-separated hex or plain string
+        s = args.data
+        if ',' in s or s.startswith('0x') or all(c in "0123456789abcdefx, " for c in s.lower()):
+            parts = [p.strip() for p in s.split(',') if p.strip()]
+            try:
+                data_bytes = bytes(int(p,0) for p in parts)
+            except Exception:
+                data_bytes = s.encode()
+        else:
+            data_bytes = s.encode()
+        bulk_write(args.vid, args.pid, args.endpoint, data_bytes, args.timeout, args.intf)
+    else:
+        parser.print_help()
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()

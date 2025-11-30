@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>WebUSB quick demo</title>
+    <style>
+        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 1rem; }
+        button { margin: .25rem; padding: .5rem 1rem; }
+        pre { background:#f6f8fa; padding:1rem; border-radius:6px; max-height:40vh; overflow:auto; }
+        .row { margin-bottom:.5rem; }
+    </style>
+</head>
+<body>
+    <h2>WebUSB demo</h2>
+
+    <div class="row">
+        <button id="btn-request">Request Device</button>
+        <button id="btn-open" disabled>Open & Claim</button>
+        <button id="btn-close" disabled>Close</button>
+        <button id="btn-send" disabled>Send "Hello"</button>
+        <button id="btn-read-once" disabled>Read Once</button>
+    </div>
+
+    <div>
+        <label>Interface #: <input id="interface-num" size="3" /></label>
+        <label>IN endpoint #: <input id="in-endpoint" size="3" /></label>
+        <label>OUT endpoint #: <input id="out-endpoint" size="3" /></label>
+        <small> (Leave blank to auto-detect from selected interface)</small>
+    </div>
+
+    <h3>Log</h3>
+    <pre id="log">Open the page over HTTPS or on localhost. Use the Request Device button.</pre>
+
+<script>
+/*
+    Simple WebUSB example:
+    - Click "Request Device" to pick a USB device (adjust filters below).
+    - Open -> claims first selected interface (or enter interface number).
+    - Auto-detects IN/OUT endpoints if possible.
+    - Send/Read use transferOut / transferIn with bulk/interrupt endpoints.
+*/
+
+const logEl = document.getElementById('log');
+function log(...args){ logEl.textContent += '\n' + args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '); logEl.scrollTop = logEl.scrollHeight; }
+
+let device = null;
+let ifaceNum = null;
+let inEndpoint = null;
+let outEndpoint = null;
+let readerActive = false;
+
+// Change filters to match your device vendorId/productId. Filters must be non-empty.
+const REQUEST_FILTERS = [
+    // Example: Arduino vendorId 0x2341; replace with your device VID/PID.
+    // { vendorId: 0x2341 }
+    // Use a filter that matches the device you want to test.
+    {}
+];
+
+document.getElementById('btn-request').addEventListener('click', async () => {
+    try {
+        device = await navigator.usb.requestDevice({ filters: REQUEST_FILTERS });
+        log('Device selected:', device.productName || '<unnamed>', `(vendorId=${device.vendorId}, productId=${device.productId})`);
+        document.getElementById('btn-open').disabled = false;
+        // show hint when device already open
+        document.getElementById('btn-close').disabled = true;
+        fillInterfaceInputsFromDevice(device);
+    } catch (err) {
+        log('requestDevice canceled or failed:', err.message || err);
+    }
+});
+
+document.getElementById('btn-open').addEventListener('click', async () => {
+    if (!device) { log('No device selected'); return; }
+    try {
+        await device.open();
+        log('Device opened');
+        // select configuration if none
+        if (device.configuration === null && device.configurations && device.configurations.length) {
+            // pick first configuration
+            await device.selectConfiguration(device.configurations[0].configurationValue);
+            log('Selected configuration', device.configuration.configurationValue);
+        }
+
+        // use UI-specified interface if provided
+        const uiIface = parseInt(document.getElementById('interface-num').value);
+        if (!isNaN(uiIface)) {
+            ifaceNum = uiIface;
+        } else {
+            // auto pick first interface with endpoints
+            ifaceNum = findFirstInterfaceWithEndpoints(device);
+        }
+        if (ifaceNum === null) throw new Error('No usable interface found');
+
+        await device.claimInterface(ifaceNum);
+        log('Claimed interface', ifaceNum);
+
+        // detect endpoints if not provided
+        const uiIn = parseInt(document.getElementById('in-endpoint').value);
+        const uiOut = parseInt(document.getElementById('out-endpoint').value);
+
+        if (!isNaN(uiIn) && !isNaN(uiOut)) {
+            inEndpoint = uiIn; outEndpoint = uiOut;
+        } else {
+            const eps = getInterfaceEndpoints(device, ifaceNum);
+            inEndpoint = uiIn || eps.in;
+            outEndpoint = uiOut || eps.out;
+        }
+
+        if (inEndpoint == null && outEndpoint == null) {
+            log('Warning: no in/out endpoints detected; you might only be able to do control transfers.');
+        } else {
+            log('Using endpoints => IN:', inEndpoint, 'OUT:', outEndpoint);
+        }
+
+        document.getElementById('btn-close').disabled = false;
+        document.getElementById('btn-send').disabled = outEndpoint == null;
+        document.getElementById('btn-read-once').disabled = inEndpoint == null;
+        document.getElementById('btn-open').disabled = true;
+
+        // attach connect/disconnect listeners
+        navigator.usb.addEventListener('disconnect', e => {
+            if (e.device === device) {
+                log('Device disconnected');
+                cleanup();
+            }
+        });
+
+    } catch (err) {
+        log('Open/Claim failed:', err.message || err);
+    }
+});
+
+document.getElementById('btn-close').addEventListener('click', async () => {
+    if (!device) return;
+    try {
+        if (device.opened) {
+            try { await device.releaseInterface(ifaceNum); } catch(e){ /* ignore */ }
+            await device.close();
+            log('Device closed');
+        }
+    } catch (err) {
+        log('Close failed:', err.message || err);
+    } finally {
+        cleanup();
+    }
+});
+
+document.getElementById('btn-send').addEventListener('click', async () => {
+    if (!device || !device.opened || outEndpoint == null) { log('No open device / out endpoint'); return; }
+    const text = 'Hello from WebUSB\n';
+    const data = new TextEncoder().encode(text);
+    try {
+        const res = await device.transferOut(outEndpoint, data);
+        log('transferOut result:', res.status, 'bytesWritten:', res.bytesWritten);
+    } catch (err) {
+        log('transferOut error:', err.message || err);
+    }
+});
+
+document.getElementById('btn-read-once').addEventListener('click', async () => {
+    if (!device || !device.opened || inEndpoint == null) { log('No open device / in endpoint'); return; }
+    try {
+        const res = await device.transferIn(inEndpoint, 64);
+        if (res.status === 'ok') {
+            const text = new TextDecoder().decode(res.data);
+            log('transferIn:', text, res);
+        } else {
+            log('transferIn status:', res.status);
+        }
+    } catch (err) {
+        log('transferIn error:', err.message || err);
+    }
+});
+
+// Helpers
+
+function cleanup(){
+    device = null;
+    ifaceNum = null;
+    inEndpoint = null;
+    outEndpoint = null;
+    readerActive = false;
+    document.getElementById('btn-open').disabled = false;
+    document.getElementById('btn-close').disabled = true;
+    document.getElementById('btn-send').disabled = true;
+    document.getElementById('btn-read-once').disabled = true;
+}
+
+function findFirstInterfaceWithEndpoints(dev){
+    if (!dev.configuration) return null;
+    for (const intf of dev.configuration.interfaces) {
+        for (const alt of intf.alternates) {
+            if (alt.endpoints && alt.endpoints.length) return intf.interfaceNumber;
+        }
+    }
+    return null;
+}
+
+function getInterfaceEndpoints(dev, interfaceNumber){
+    const result = { in: null, out: null };
+    if (!dev.configuration) return result;
+    for (const intf of dev.configuration.interfaces) {
+        if (intf.interfaceNumber !== interfaceNumber) continue;
+        for (const alt of intf.alternates) {
+            for (const ep of alt.endpoints) {
+                if (ep.direction === 'in' && result.in == null) result.in = ep.endpointNumber;
+                if (ep.direction === 'out' && result.out == null) result.out = ep.endpointNumber;
+            }
+        }
+    }
+    return result;
+}
+
+function fillInterfaceInputsFromDevice(dev){
+    // show first interface number if available
+    const inEl = document.getElementById('interface-num');
+    const ints = (dev && dev.configurations && dev.configurations[0] && dev.configurations[0].interfaces) || (dev && dev.configuration && dev.configuration.interfaces) || [];
+    if (ints && ints.length) {
+        inEl.value = ints[0].interfaceNumber;
+        // attempt to fill endpoints
+        const eps = getInterfaceEndpoints(dev, ints[0].interfaceNumber);
+        if (eps.in) document.getElementById('in-endpoint').value = eps.in;
+        if (eps.out) document.getElementById('out-endpoint').value = eps.out;
+    } else {
+        inEl.value = '';
+    }
+}
+
+// Basic feature check
+if (!('usb' in navigator)) {
+    log('WebUSB not supported in this browser. Use Chrome/Edge with HTTPS or localhost.');
+} else {
+    log('WebUSB supported. Click "Request Device" to start.');
+}
+</script>
+</body>
+</html>
