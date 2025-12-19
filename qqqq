@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TryHackMe — Beginner Roadmap</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; line-height:1.5; margin:24px; color:#0b1220; }
+    h1,h2 { color:#0b3b5a; }
+    a { color:#0a66c2; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .card { border:1px solid #e3e8ef; border-radius:8px; padding:14px; margin-bottom:12px; background:#fbfdff; }
+    .meta { font-size:0.9rem; color:#475569; }
+    ul { margin:8px 0 0 20px; }
+    .note { font-size:0.9rem; color:#7b8794; margin-top:12px; }
+  </style>
+</head>
+<body>
+  <h1>TryHackMe — Beginner Roadmap (HTML)</h1>
+
+  <p class="note">
+    Use this roadmap only for legal, ethical learning. Practice in isolated labs and VMs you own or have explicit permission to test.
+  </p>
+
+  <section class="card">
+    <h2>Recommended learning paths (order)</h2>
+    <ol>
+      <li>
+        <strong>Complete Beginner</strong> — Start here if you're new to cybersecurity.
+        <div class="meta"><a href="https://tryhackme.com/path/complete-beginner" target="_blank">TryHackMe: Complete Beginner</a> • Est. time: 6–10 hrs • Difficulty: Very Low</div>
+      </li>
+      <li>
+        <strong>Pre-Security</strong> — Foundations: networking, Linux, Windows basics.
+        <div class="meta"><a href="https://tryhackme.com/path/pre-security" target="_blank">TryHackMe: Pre-Security</a> • Est. time: 8–12 hrs • Difficulty: Low</div>
+      </li>
+      <li>
+        <strong>Web Fundamentals</strong> — Web concepts and OWASP basics (safe, defensive learning).
+        <div class="meta"><a href="https://tryhackme.com/path/web-fundamentals" target="_blank">TryHackMe: Web Fundamentals</a> • Est. time: 6–10 hrs • Difficulty: Low–Medium</div>
+      </li>
+      <li>
+        <strong>Junior Penetration Tester (optional)</strong> — Practical staged labs and realistic boxes.
+        <div class="meta"><a href="https://tryhackme.com/path/junior-penetration-tester" target="_blank">TryHackMe: Junior Penetration Tester</a> • Est. time: 20–40 hrs • Difficulty: Medium</div>
+      </li>
+      <li>
+        <strong>Blue Team / Defensive Paths</strong> — If you want to focus on defense, sysadmin, detection.
+        <div class="meta"><a href="https://tryhackme.com/path/blue-team" target="_blank">TryHackMe: Blue Team</a> • Est. time: varies • Difficulty: Low–High</div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>High-value beginner rooms (suggested sequence)</h2>
+    <ul>
+      <li><strong>Intro to Cyber Security / Intro to Offensive Security</strong> — orientation and safe ethics.</li>
+      <li><strong>Linux Fundamentals</strong> — terminal, files, users, permissions.</li>
+      <li><strong>Windows Fundamentals</strong> — Windows basics, PowerShell intro, services.</li>
+      <li><strong>Nmap</strong> — network discovery and port scanning (use on your lab only).</li>
+      <li><strong>HTTP Basics / Web Fundamentals</strong> — request/response, forms, cookies.</li>
+      <li><strong>OWASP Top 10 Overview</strong> — high-level web vulnerabilities and defenses.</li>
+      <li><strong>Basic Forensics / Logging</strong> — defensive skills: log analysis and incident response.</li>
+    </ul>
+    <div class="meta">Search these room titles on TryHackMe or follow the path links above. Estimated time per room: 30–90 mins depending on depth.</div>
+  </section>
+
+  <section class="card">
+    <h2>Practical setup & safety tips</h2>
+    <ul>
+      <li>Run Kali and target VMs inside VirtualBox/VMware on an isolated "host-only" or "internal" network.</li>
+      <li>Take snapshots before experimenting so you can revert quickly.</li>
+      <li>Never attack machines you don't own or don't have explicit written permission to test.</li>
+      <li>Use TryHackMe's browser-based lab (if available) to avoid local setup for some rooms.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Next recommended steps</h2>
+    <ol>
+      <li>Create a TryHackMe account (if you don't have one) and complete the "Complete Beginner" path.</li>
+      <li>Set up two VMs (Kali + Windows 11 or a vulnerable target) on an isolated network and practice Nmap and basics.</li>
+      <li>Pick one focused goal: web security, Linux admin, or incident response — follow the matching TryHackMe path.</li>
+    </ol>
+  </section>
+
+  <p class="note">If you want, I can generate a downloadable checklist (PDF/HTML) with step-by-step instructions to set up the lab safely. Which format do you prefer?</p>
+</body>
+</html>
